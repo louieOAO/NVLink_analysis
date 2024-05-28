@@ -46,22 +46,22 @@ void ComputeCounterDiff(CounterInfo* prev, CounterInfo* now, int gpu_id, int pri
     
     for(int i=0;i<NVLINK_NUM;i++){
         if(now[i].rxcounter != prev[i].rxcounter){
-            double diff = (now[i].rxcounter - prev[i].rxcounter);
+            long long diff = (now[i].rxcounter - prev[i].rxcounter);
             long long timediff = now[i].rxtimestamp - prev[i].rxtimestamp;
-            if(printchange)printf("%lld id: %d link: %d Rx: %lf (GB/s)\n", now[i].rxtimestamp, gpu_id, i, diff);
+            if(printchange)printf("%lld id: %d link: %d Rx: %lld\n", now[i].rxtimestamp, gpu_id, i, diff);
         }
 
         if(now[i].txcounter != prev[i].txcounter){
-            double diff = (now[i].txcounter - prev[i].txcounter);
+            long long diff = (now[i].txcounter - prev[i].txcounter);
             long long timediff = now[i].txtimestamp - prev[i].txtimestamp;
-            if(printchange)printf("%lld id: %d link: %d Tx: %lf (GB/s)\n", now[i].txtimestamp, gpu_id, i, diff);  
+            if(printchange)printf("%lld id: %d link: %d Tx: %lld\n", now[i].txtimestamp, gpu_id, i, diff);  
         }
         prev[i].txcounter = now[i].txcounter;
         prev[i].rxcounter = now[i].rxcounter;
         prev[i].txtimestamp = now[i].txtimestamp;
         prev[i].rxtimestamp = now[i].rxtimestamp;
     }
-    fflush(stdout);
+    
 
 }
 
@@ -97,6 +97,7 @@ int main(int argc, char** argv){
             GetNVLinkCounter(device_id[i], device[i], now[i]);
             ComputeCounterDiff(prev[i], now[i], device_id[i], 1);
         }
+        fflush(stdout);
     }
 
 

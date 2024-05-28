@@ -1,41 +1,36 @@
-# f1 = open('record.txt', 'r')
-# # f0 = open('record_1.txt', 'r')
-# # result = open('sort.txt', 'w+')
-# # data = f01.readlines() + f23.readlines()
-# # data = sorted(data, key = lambda x: int(x.split(' ')[0]))
-# # result.writelines(data)
-
-# rxcnt = 0
-# txcnt = 0
-# gpuid = '1'
-# for line in f1.readlines():
-#     if line.split(' ')[2] == gpuid and line.split(' ')[5] == 'Tx:':
-#         txcnt = txcnt + float(line.split(' ')[6])
-#     if line.split(' ')[2] == gpuid and line.split(' ')[5] == 'Rx:':
-#         rxcnt = rxcnt + float(line.split(' ')[6])
-        
-
-
-
-
+import sys
 def NVLinkinfo(filename, gpuid):
     f = open(filename, 'r')
-
-    rxcnt = 0
-    txcnt = 0
+    cnt = 0
+    rxcnt = [0 for i in range(len(gpuid))]
+    txcnt = [0 for i in range(len(gpuid))]
     for line in f.readlines():
-        if line.split(' ')[2] == gpuid and line.split(' ')[5] == 'Tx:':
-            txcnt = txcnt + float(line.split(' ')[6])
-        if line.split(' ')[2] == gpuid and line.split(' ')[5] == 'Rx:':
-            rxcnt = rxcnt + float(line.split(' ')[6])
+        cnt+=1
+        try:
+            index = int(line.split(' ')[2])
+            if index in gpuid and line.split(' ')[5] == 'Tx:':
+                txcnt[index] = txcnt[index] + float(line.split(' ')[6])
+            if index in gpuid and line.split(' ')[5] == 'Rx:':
+                rxcnt[index] = rxcnt[index] + float(line.split(' ')[6])
+        except:
+            print(cnt)
+    
     
     print("inside",filename)
     print("**************************")
-    print("GPU id:", str(gpuid))
-    print(f'Tx {txcnt/1024/1024} GiB')
-    print(f'Rx {rxcnt/1024/1024} GiB')
+    for i in range(len(gpuid)):
+        print("GPU id:", i)
+        print(f'Tx {txcnt[i]/1024/1024} GiB')
+        print(f'Rx {rxcnt[i]/1024/1024} GiB')
     print("**************************")
 
 
-NVLinkinfo('record.txt', '1')
+
+if len(sys.argv) < 2:
+    print('Lack File Name')
+    sys.exit()
+filename = sys.argv[1]
+gpuid = [i for i in range(8)]
+NVLinkinfo(filename, gpuid)
+    
     
