@@ -28,7 +28,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
-#include <nccl.h>
+#include "/home/rogerlee/code/nccl/build/include/nccl.h"
 #include <math.h>
 const int ngpu = 8;
 
@@ -69,43 +69,82 @@ void ncclfinish(ncclComm_t* &comm, cudaStream_t* &s, int* device){
 }
 
 template<class T>
-void allreduceTest(long long data_size, int* device, int loop, ncclComm_t* comm, cudaStream_t* s, T** &src, T** &dst, int split){
+float allreduceTest(long long data_size, int* device, int loop, ncclComm_t* comm, cudaStream_t* s, T** &src, T** &dst, size_t mode){
   int cnt = 0;
   float elapsedTime = 0.0, totaltime = 0.0;
-  cudaEvent_t e_start;
-  cudaEvent_t e_stop;
-  cudaEventCreate(&e_start);                    
+  cudaEvent_t e_start, e_stop;
+  cudaEventCreate(&e_start);
   cudaEventCreate(&e_stop);
+
+  // cudaEvent_t e_start[ngpu];
+  // cudaEvent_t e_stop[ngpu];
+  // for(int g=0;g<ngpu;g++){
+  //   if(cudaEventCreate(&e_start[g])!=cudaSuccess){
+  //     printf("Create %d start event ERROR\n",g);
+  //     return;
+  //   }
+  //   if(cudaEventCreate(&e_stop[g])!=cudaSuccess){
+  //     printf("Create %d stop event ERROR\n",g);
+  //     return;
+  //   }      
+  // }
+    
+  
   while(cnt<loop){
     ncclGroupStart(); 
     for(int g = 0; g < ngpu; g++) {
       cudaSetDevice(device[g]);
-      if(split == 0){
-        ncclAllReduce(src[g], dst[g], data_size, ncclDouble, ncclSum, comm[g], s[g]); 
-      }else{
+      // ncclAllReduce(src[g], dst[g], data_size, ncclDouble, ncclSum, comm[g], s[g], mode); 
+      // if(split == 0){
+      //   ncclAllReduce(src[g], dst[g], data_size, ncclDouble, ncclSum, comm[g], s[g], mode); 
+      // }else{
         int offset = data_size/2;
-        ncclAllReduce(src[g], dst[g], offset, ncclDouble, ncclSum, comm[g], s[g]); 
-        ncclAllReduce(src[g]+offset, dst[g]+offset, data_size - offset, ncclDouble, ncclSum, comm[g], s[g]); 
-      }
+        ncclAllReduce(src[g], dst[g], offset, ncclDouble, ncclSum, comm[g], 0, 3); 
+        ncclAllReduce(src[g]+offset, dst[g]+offset, data_size - offset, ncclDouble, ncclSum, comm[g], 0, 2); 
+      // }
     }
+    ncclGroupEnd();
+    ncclGroupStart(); 
+    for(int g = 0; g < ngpu; g++) {
+      cudaSetDevice(device[g]);
+      // ncclAllReduce(src[g], dst[g], data_size, ncclDouble, ncclSum, comm[g], s[g], mode); 
+      // if(split == 0){
+      //   ncclAllReduce(src[g], dst[g], data_size, ncclDouble, ncclSum, comm[g], s[g], mode); 
+      // }else{
+        int offset = data_size/2;
+        ncclAllReduce(src[g], dst[g], offset, ncclDouble, ncclSum, comm[g], 0, 2); 
+        ncclAllReduce(src[g]+offset, dst[g]+offset, data_size - offset, ncclDouble, ncclSum, comm[g], 0, 3); 
+      // }
+    }
+    // for(int g=0;g<ngpu;g++){
+    //   cudaEventRecord(e_start[g], s[g]);  
+    // }
     cudaEventRecord(e_start, 0);
     ncclGroupEnd();
 
     for(int g = 0; g < ngpu; g++) {
         cudaSetDevice(device[g]);    
         cudaDeviceSynchronize();  
-        cudaStreamSynchronize(s[g]);        
+        cudaStreamSynchronize(s[g]);     
+        // cudaEventRecord(e_stop[g], s[g]);   
+        // cudaEventSynchronize(e_stop[g]);
+        // cudaEventElapsedTime(&totaltime, e_start[g], e_stop[g]);
+        // elapsedTime = elapsedTime+totaltime;
     }
-
     cudaEventRecord(e_stop, 0);
     cudaEventSynchronize(e_stop);
     cudaEventElapsedTime(&totaltime, e_start, e_stop);
     elapsedTime = elapsedTime+totaltime;
     cnt++;
   }
-
-
-  printf("Loop %d cost %3.1f ms\n", loop, totaltime);
+  // for(int g=0;g<ngpu;g++){
+  //   cudaEventDestroy(e_start[g]);
+  //   cudaEventDestroy(e_stop[g]); 
+  // }
+  cudaEventDestroy(e_start);
+  cudaEventDestroy(e_stop);
+  return elapsedTime/8;
+  
 }
 
 template<class T>
@@ -140,7 +179,7 @@ int main(int argc, char* argv[]) {
   if(argc > 1)loop = atoi(argv[1]);
   if(argc > 2)split = 1;
   double *x;
-  // 4999900001 2147483648
+  // 4,999,900,001 2,147,483,648
   long long data_size = 2147483648;//16GB
   GenData(x,data_size);
   ncclComm_t* comm;
@@ -157,17 +196,57 @@ int main(int argc, char* argv[]) {
     cudaMemcpy(device_src[g],  x, data_size * sizeof(double), cudaMemcpyHostToDevice); /*Copy from Host to Devices*/
   }
 
+  float time;
+  size_t mode = 0;
+  clock_t begin, end;
 
-  
-  // allreduceTest(data_size, device, loop, comm, s, device_src, device_dst, 0);
+  // printf("******   warm up mode = %d ******\n", mode);
+  // allreduceTest(data_size, device, 5, comm, s, device_src, device_dst, mode);
+  // printf("******************************\n");
+
+  // begin = clock();
+  // time = allreduceTest(data_size, device, loop, comm, s, device_src, device_dst, mode);
+  // end = clock();
+  // cudaSetDevice(device[0]);
   // cudaMemcpy(x,  device_dst[0], data_size * sizeof(double), cudaMemcpyDeviceToHost);
   // printf("Total ERROR %lld\n", CheckError(x, data_size));
+  // printf("kernel cost %3.1f ms\n", time);
+  // printf("Total time %lf s\n", (double)(end - begin) / CLOCKS_PER_SEC);
+  // printf("******************************\n\n");
 
+
+  // mode = 1;
+  // printf("******   warm up mode = %d ******\n", mode);
+  // allreduceTest(data_size, device, 5, comm, s, device_src, device_dst, mode);
+  // printf("******************************\n");
+
+  // begin = clock();
+  // time = allreduceTest(data_size, device, loop, comm, s, device_src, device_dst, mode);
+  // end = clock();
+  // cudaSetDevice(device[0]);
+  // cudaMemcpy(x,  device_dst[0], data_size * sizeof(double), cudaMemcpyDeviceToHost);
+  // printf("Total ERROR %lld\n", CheckError(x, data_size));
+  // printf("kernel cost %3.1f ms\n", time);
+  // printf("Total time %lf s\n", (double)(end - begin) / CLOCKS_PER_SEC);
+  // printf("******************************\n\n");
+
+  mode = 7;
+  printf("******   warm up mode = %zu ******\n", mode);
+  allreduceTest(data_size, device, 5, comm, s, device_src, device_dst, mode);
+  printf("******************************\n");
+
+  begin = clock();
+  time = allreduceTest(data_size, device, loop, comm, s, device_src, device_dst, mode);
+  end = clock();
   cudaSetDevice(device[0]);
-  allreduceTest(data_size, device, loop, comm, s, device_src, device_dst, split);
   cudaMemcpy(x,  device_dst[0], data_size * sizeof(double), cudaMemcpyDeviceToHost);
   printf("Total ERROR %lld\n", CheckError(x, data_size));
-  
+  printf("kernel cost %3.1f ms\n", time);
+  printf("Total time %lf s\n", (double)(end - begin) / CLOCKS_PER_SEC);
+  printf("******************************\n\n");
+
+
+
   ncclfinish(comm, s, device);
   cudaFree(device_src);
   cudaFree(device_dst);
